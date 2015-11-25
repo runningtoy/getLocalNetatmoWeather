@@ -41,6 +41,7 @@ if($debug){echo "Lon_SW:"  .$lon_sw . "<br>";}
 if($debug){echo "Lat_NE:"  .$lat_ne . "<br>";}
 if($debug){echo "Lon_NE:"  .$lon_ne . "<br>";}
 
+//Netatmo Settings
 $username="";
 $password="";
 $app_id = "";
