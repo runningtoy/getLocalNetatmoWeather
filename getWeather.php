@@ -2,20 +2,11 @@
 error_reporting(E_ALL ^ E_NOTICE);
 
 //Abfrage der NetATMO Public Sensoren um die lokale Ist-Temperatur zu ermitteln
-//Da kann man php code laufen lassen
-//http://phpfiddle.org/
-//Info er Errors
-//http://php.net/manual/de/function.error-reporting.php
-//hier hab ich die Boundingbox her
-//https://www.sitepoint.com/community/t/adding-distance-to-gps-coordinates-to-get-bounding-box/5820/10
-
 
 $searchadress=$_GET['address'];   //Mindestparameter
 $distance= (isset($_GET['distance'])) ? $_GET['distance'] : 1; //Distancparameter ist optional in KM
 $valuetype= (isset($_GET['value'])) ? $_GET['value'] : "temperature"; //Welcher Sensortyp soll abgefragt werden
 $debug= (isset($_GET['debug'])) ? $_GET['debug'] : false; //Welcher Sensortyp soll abgefragt werden
-
-
  
 $searchadress=str_replace(' ', '+',$searchadress);
 
@@ -23,19 +14,19 @@ $searchadress=str_replace(' ', '+',$searchadress);
 $api_url = "http://maps.google.com/maps/api/geocode/json?address=" . $searchadress;
 if($debug){echo $api_url . "<br>";}
 
-$result = file_get_contents($api_url);     
-
+//http call
+$result = file_get_contents($api_url);  
 $json_devices = json_decode($result);
 
 //Koordinaten abfragen
 $lat=($json_devices->results[0]->geometry->location->lat);
-$lon=($json_devices->results[0]->geometry->location->lng);
+$lng=($json_devices->results[0]->geometry->location->lng);
 
-//Eckkoordinaten berechnen f NETATMO
-list($lat_sw,$lon_sw,$lat_ne,$lon_ne) = getBoundingBox($lat, $lon, $distance);
+list($lat_ne,$lon_ne) = getDueCoords($lat, $lng, 45, $distance);
+list($lat_sw,$lon_sw) = getDueCoords($lat, $lng, 225, $distance);
 
 if($debug){echo "Lat:"  .$lat . "<br>";}
-if($debug){echo "Lon:"  .$lon . "<br>";}
+if($debug){echo "Lon:"  .$lng . "<br>";}
 if($debug){echo "Lat_SW:"  .$lat_sw . "<br>";}
 if($debug){echo "Lon_SW:"  .$lon_sw . "<br>";}
 if($debug){echo "Lat_NE:"  .$lat_ne . "<br>";}
@@ -47,6 +38,8 @@ $password="";
 $app_id = "";
 $app_secret = "";
 
+
+//Netatmo Token ermitteln
 $token_url = "https://api.netatmo.net/oauth2/token";
 $postdata = http_build_query(
         array(
@@ -68,112 +61,73 @@ $opts = array('http' =>
 
 $context  = stream_context_create($opts);
 $response = file_get_contents($token_url, false, $context);
-
 $params = null;
 $params = json_decode($response, true);
 
-//API Url zusammenbauen
+
+
+//API Url zusammenbauen und JSON Objekt ermittlen
 $api_url = "https://api.netatmo.net/api/getpublicdata?access_token=" .  $params['access_token'] . "&lat_ne=" . $lat_ne ."&lon_ne=" . $lon_ne ."&lat_sw=" . $lat_sw ."&lon_sw=" . $lon_sw ."&filter=true";
 $localweatherstations = file_get_contents($api_url);     //url abfragen
-
 $json_devices = json_decode($localweatherstations); //JSON generieren
 
+
+//Werte ermitteln
 echo getWeatherValue($json_devices,$valuetype,$debug); //Durchschnittswert ermitteln
 
 
 
 
 function getWeatherValue($json, $name,$debug){
-$dev_count=0;
-$temp_sum=0;
-foreach($json->body as $key => $devices)
-{ //loop er einzelne Messstellen
-   foreach ($devices->measures as $key => $measures)
-   { //einzelnen Messger舩e
-      if(isset($measures->type))
-      {   //hat das Messger舩 erhaupt Sensoren
-         $count=count($measures->type);
-         for ($x = 0; $x < $count; $x++)
-         { //loop er alle sensoren
-           if ($measures->type[$x] == $name)
-           {   //gibt es einen Temperatursensor?
-             foreach ($measures->res as $k=>$v)
-             {   //wenn es einen Sensor gibt loop er alle "res" (gibt nur eins)
-                //echo json_encode(($v[$x]), JSON_PRETTY_PRINT) . "<br>########<br>";
-               $temp_sum=$temp_sum+$v[$x];   //temperatur addieren
-               $dev_count++;  //Gefunden Messsensoren
-               if($debug){echo $v[$x] . "<br>";}
-             }
-           }
+   $dev_count=0;
+   $temp_sum=0;
+   foreach($json->body as $key => $devices)
+   { //loop ?er einzelne Messstellen
+      foreach ($devices->measures as $key => $measures)
+      { //einzelnen Messger?e
+         if(isset($measures->type))
+         {   //hat das Messger? ?erhaupt Sensoren
+            $count=count($measures->type);
+            for ($x = 0; $x < $count; $x++)
+            { //loop ?er alle sensoren
+              if ($measures->type[$x] == $name)
+              {   //gibt es einen Temperatursensor?
+                foreach ($measures->res as $k=>$v)
+                {   //wenn es einen Sensor gibt loop ?er alle "res" (gibt nur eins)
+                   //echo json_encode(($v[$x]), JSON_PRETTY_PRINT) . "<br>########<br>";
+                  $temp_sum=$temp_sum+$v[$x];   //temperatur addieren
+                  $dev_count++;  //Gefunden Messsensoren
+                  if($debug){echo $v[$x] . "<br>";}
+                }
+              }
+            }
          }
       }
    }
+   if($debug){echo "Anzahl an Messstationen " . $dev_count . "<br>";}
+   if($debug){echo "Durchschnittswert " . $temp_sum/$dev_count . "<br>";}
+   return $temp_sum/$dev_count;
 }
 
-//return floor(($temp_sum/$dev_count) * 2) / 2; //runden der Werte
+function getDueCoords($latitude, $longitude, $bearing, $distance, $distance_unit = "km") {
+   if ($distance_unit == "m") {
+   // Distance is in miles.
+     $radius = 3963.1676;
+   }
+   else {
+   // distance is in km.
+   $radius = 6378.1;
+   }
 
-if($debug){echo "Anzahl an Messstationen " . $dev_count . "<br>";}
-if($debug){echo "Durchschnittswert " . $temp_sum/$dev_count . "<br>";}
-return $temp_sum/$dev_count;
-}
+   //	New latitude in degrees.
+   $new_latitude = rad2deg(asin(sin(deg2rad($latitude)) * cos($distance / $radius) + cos(deg2rad($latitude)) * sin($distance / $radius) * cos(deg2rad($bearing))));
+      
+   //	New longitude in degrees.
+   $new_longitude = rad2deg(deg2rad($longitude) + atan2(sin(deg2rad($bearing)) * sin($distance / $radius) * cos(deg2rad($latitude)), cos($distance / $radius) - sin(deg2rad($latitude)) * sin(deg2rad($new_latitude))));
 
-
-
-function getBoundingBox($lat_degrees,$lon_degrees,$distance_in_km) {
-
-	$radius = 3963.1; // of earth in miles
-   
-   $distance_in_miles=0.621371*$distance_in_km;
-
-	// bearings
-	$due_north = 0;
-	$due_south = 180;
-	$due_east = 90;
-	$due_west = 270;
-
-	// convert latitude and longitude into radians
-	$lat_r = deg2rad($lat_degrees);
-	$lon_r = deg2rad($lon_degrees);
-
-	// find the northmost, southmost, eastmost and westmost corners $distance_in_miles away
-	// original formula from
-	// http://www.movable-type.co.uk/scripts/latlong.html
-
-	$northmost  = asin(sin($lat_r) * cos($distance_in_miles/$radius) + cos($lat_r) * sin ($distance_in_miles/$radius) * cos($due_north));
-	$southmost  = asin(sin($lat_r) * cos($distance_in_miles/$radius) + cos($lat_r) * sin ($distance_in_miles/$radius) * cos($due_south));
-
-	$eastmost = $lon_r + atan2(sin($due_east)*sin($distance_in_miles/$radius)*cos($lat_r),cos($distance_in_miles/$radius)-sin($lat_r)*sin($lat_r));
-	$westmost = $lon_r + atan2(sin($due_west)*sin($distance_in_miles/$radius)*cos($lat_r),cos($distance_in_miles/$radius)-sin($lat_r)*sin($lat_r));
-
-
-	$northmost = rad2deg($northmost);
-	$southmost = rad2deg($southmost);
-	$eastmost = rad2deg($eastmost);
-	$westmost = rad2deg($westmost);
-
-	// sort the lat and long so that we can use them for a between query
-	if ($northmost > $southmost) {
-		$lat1 = $southmost;
-		$lat2 = $northmost;
-
-	} else {
-		$lat1 = $northmost;
-		$lat2 = $southmost;
-	}
-
-
-	if ($eastmost > $westmost) {
-		$lon1 = $westmost;
-		$lon2 = $eastmost;
-
-	} else {
-		$lon1 = $eastmost;
-		$lon2 = $westmost;
-	}
-
-	return array($lat1,$lon1,$lat2,$lon2);
-	
-}
+   return array($new_latitude,$new_longitude);
+  
+}	
 ?>
  
 
