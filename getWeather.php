@@ -6,7 +6,9 @@ error_reporting(E_ALL ^ E_NOTICE);
 $searchadress=$_GET['address'];   //Mindestparameter
 $distance= (isset($_GET['distance'])) ? $_GET['distance'] : 1; //Distancparameter ist optional in KM
 $valuetype= (isset($_GET['value'])) ? $_GET['value'] : "temperature"; //Welcher Sensortyp soll abgefragt werden
-$debug= (isset($_GET['debug'])) ? $_GET['debug'] : false; //Welcher Sensortyp soll abgefragt werden
+$debug= (isset($_GET['debug'])) ? $_GET['debug'] : false; //Verbose
+
+
  
 $searchadress=str_replace(' ', '+',$searchadress);
 
@@ -74,7 +76,8 @@ $json_devices = json_decode($localweatherstations); //JSON generieren
 
 //Werte ermitteln
 echo getWeatherValue($json_devices,$valuetype,$debug); //Durchschnittswert ermitteln
-
+if($debug){echo "<br>";}
+if($debug){drawGoogleMapsBoundry($lat,$lng,$distance);}
 
 
 
@@ -107,9 +110,10 @@ function getWeatherValue($json, $name,$debug){
    if($debug){echo "Anzahl an Messstationen " . $dev_count . "<br>";}
    if($debug){echo "Durchschnittswert " . $temp_sum/$dev_count . "<br>";}
    return $temp_sum/$dev_count;
+
 }
 
-function getDueCoords($latitude, $longitude, $bearing, $distance, $distance_unit = "km") {
+function getDueCoords($latitude, $longitude, $bearing, $distance, $distance_unit = "km",$return_as_array = true) {
    if ($distance_unit == "m") {
    // Distance is in miles.
      $radius = 3963.1676;
@@ -125,9 +129,41 @@ function getDueCoords($latitude, $longitude, $bearing, $distance, $distance_unit
    //	New longitude in degrees.
    $new_longitude = rad2deg(deg2rad($longitude) + atan2(sin(deg2rad($bearing)) * sin($distance / $radius) * cos(deg2rad($latitude)), cos($distance / $radius) - sin(deg2rad($latitude)) * sin(deg2rad($new_latitude))));
 
-   return array($new_latitude,$new_longitude);
-  
+        
+  if ($return_as_array) {
+      //  Assign new latitude and longitude to an array to be returned to the caller.
+      $coord = array($new_latitude,$new_longitude);
+    }
+    else {
+      $coord = $new_latitude . "," . $new_longitude;
+    }
+    return $coord;
 }	
+
+
+function drawGoogleMapsBoundry($lat,$lng,$d){
+// Create the static map api image.
+    $static_maps_url = "http://maps.googleapis.com/maps/api/staticmap";
+    $static_maps_url .= "?center=$lat,$lng";
+    $static_maps_url .= "&zoom=13";
+    $static_maps_url .= "&size=300x300";
+    $static_maps_url .= "&maptype=roadmap";
+    $static_maps_url .= "&sensor=false";
+    $static_maps_url .= "&markers=color:blue|$lat,$lng";
+
+    // Figure out the corners of a box surrounding our lat/lng.
+    $path_top_right = getDueCoords($lat, $lng, 45, $d,"km",false);
+    $path_bottom_right = getDueCoords($lat, $lng, 135, $d,"km",false);
+    $path_bottom_left = getDueCoords($lat, $lng, 225, $d,"km",false);
+    $path_top_left = getDueCoords($lat, $lng, 315, $d,"km",false);
+    
+    $static_maps_url .= "&path=color:334433|weight:5|fillcolor:0xFFFF0033|";
+    $static_maps_url .= "$path_top_left|$path_top_right|$path_bottom_right|";
+    $static_maps_url .= "$path_bottom_left|$path_top_left";
+     
+    // Now, draw the image from Google Maps API!
+    print "<img src='$static_maps_url'>"; 
+}
 ?>
  
 
