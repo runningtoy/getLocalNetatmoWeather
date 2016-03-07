@@ -121,7 +121,7 @@ function getWeatherValue($json, $name,$lat,$lng,$dist,$debug){
    }
    if($debug){echo "Anzahl an Messstationen " . $dev_count . "<br>";}
    if($debug){echo "Durchschnittswert " . $temp_sum/$dev_count . "<br>";}
-   return $temp_sum/$dev_count;
+   return "avg=".$temp_sum/$dev_count.";";
 
 }
 
